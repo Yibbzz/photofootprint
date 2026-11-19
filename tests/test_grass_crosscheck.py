@@ -30,7 +30,8 @@ def r_viewshed(dem, tmp_path):
         f"target_elevation={TARGET} max_distance={R} --quiet\n"
         f"r.out.gdal input=vs output={out} format=GTiff --quiet\n")
     env = dict(os.environ, GRASS_SKIP_MAPSET_OWNER_CHECK="1")
-    subprocess.run(["grass", "--tmp-project", tif, "--exec", "bash", str(script)],
+    # --tmp-location (not --tmp-project) works on GRASS 7.8 to 8.4
+    subprocess.run(["grass", "--tmp-location", "EPSG:27700", "--exec", "bash", str(script)],
                    check=True, capture_output=True, env=env, timeout=300)
     ds = gdal.Open(out)
     return ds.GetRasterBand(1).ReadAsArray() == 1, ds.GetGeoTransform()
