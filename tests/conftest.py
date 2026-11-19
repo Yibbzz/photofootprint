@@ -23,3 +23,12 @@ def qgis_app():
     QgsApplication.processingRegistry().addProvider(provider)
     yield app
     QgsApplication.processingRegistry().removeProvider(provider)
+    # Destroy leftover widgets (map canvases, docks) while QGIS is still alive;
+    # otherwise Python's shutdown can segfault after all tests have passed.
+    import gc
+    from qgis.PyQt.QtWidgets import QApplication
+    for w in QApplication.topLevelWidgets():
+        w.deleteLater()
+    QApplication.processEvents()
+    gc.collect()
+    app.exitQgis()

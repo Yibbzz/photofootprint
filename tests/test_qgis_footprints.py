@@ -120,6 +120,8 @@ def test_live_panel_follows_slider_and_saves(site):
         assert saved["heading_source"] == "manual"
         assert saved["pitch"] == pytest.approx(-15.0) and saved["pitch_source"] == "manual"
         dock.cleanup()
+        dock.deleteLater()
+        canvas.deleteLater()
     finally:
         QgsProject.instance().removeAllMapLayers()
 
@@ -131,7 +133,8 @@ def test_panel_handles_photo_without_heading(site):
     layer, dem, _, _ = site
     QgsProject.instance().addMapLayers([layer, dem])
     try:
-        dock = FootprintDock(_FakeIface(QgsMapCanvas()))
+        canvas = QgsMapCanvas()
+        dock = FootprintDock(_FakeIface(canvas))
         dock.photo_combo.setLayer(layer)
         dock.dem_combo.setLayer(dem)
         nohead = next(f for f in layer.getFeatures() if f["status"] == "no_heading")
@@ -140,5 +143,7 @@ def test_panel_handles_photo_without_heading(site):
         dock.update_footprint()   # shows a footprint at 0 degrees so the user can drag it
         assert dock.last_footprint is not None
         dock.cleanup()
+        dock.deleteLater()
+        canvas.deleteLater()
     finally:
         QgsProject.instance().removeAllMapLayers()

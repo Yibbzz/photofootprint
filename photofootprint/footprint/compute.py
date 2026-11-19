@@ -100,10 +100,7 @@ def prepare(dem: Dem, x: float, y: float, height_agl: float, max_range: float,
         z = win.z.copy()
         z[win.cell_of(x, y)] = ground   # observer stands on the ground, not on a roof cell
         src = win.to_mem(z)
-        vs = gdal.ViewshedGenerate(
-            src.GetRasterBand(1), "MEM", "", [], x, y, height_agl, 0.0,
-            1, 0, 0, 0, REFRACTION_COEFF, gdal.GVM_Edge, max_range + 2 * win.res,
-        )
+        vs = _viewshed(src.GetRasterBand(1), x, y, height_agl, max_range + 2 * win.res)
         # GDAL searches slightly past max range; our own distance test sets the edge.
         seen = _paste(vs.GetRasterBand(1).ReadAsArray() == 1, vs.GetGeoTransform(), win)
         # GDAL marks the observer's own cell and its neighbours unseen; the ground
@@ -117,6 +114,16 @@ def prepare(dem: Dem, x: float, y: float, height_agl: float, max_range: float,
     rel = surface.reshape(-1, 3)[cells] - np.array([x, y, ground + height_agl])
     return Prepared(x, y, ground, source, height_agl, max_range, win, seen & valid,
                     occlusion, surface, in_range, dist, cells, np.ascontiguousarray(rel))
+
+
+def _viewshed(band, x, y, height, max_distance):
+    """gdal.ViewshedGenerate in memory. Old GDAL (3.4) needs creationOptions=None;
+    new GDAL (3.10) needs a list. Try one, then the other."""
+    args = (x, y, height, 0.0, 1, 0, 0, 0, REFRACTION_COEFF, gdal.GVM_Edge, max_distance)
+    try:
+        return gdal.ViewshedGenerate(band, "MEM", "", [], *args)
+    except TypeError:
+        return gdal.ViewshedGenerate(band, "MEM", "", None, *args)
 
 
 def _paste(arr, gt, win: Window):

@@ -55,10 +55,11 @@ def window(ds, x, y, radius):
 
 def camera_footprint(ds, x, y, heading, pitch, hfov, vfov):
     win, z = window(ds, x, y, MAX_RANGE)
-    vs = gdal.ViewshedGenerate(
-        win.GetRasterBand(1), "MEM", "", [], x, y, EYE, 0.0,
-        1, 0, 0, -1, 0.85714, gdal.GVM_Edge, MAX_RANGE,
-    )
+    args = (x, y, EYE, 0.0, 1, 0, 0, -1, 0.85714, gdal.GVM_Edge, MAX_RANGE)
+    try:
+        vs = gdal.ViewshedGenerate(win.GetRasterBand(1), "MEM", "", [], *args)
+    except TypeError:   # GDAL 3.4 wants None instead of []
+        vs = gdal.ViewshedGenerate(win.GetRasterBand(1), "MEM", "", None, *args)
     visible = vs.GetRasterBand(1).ReadAsArray() == 1
 
     gt = win.GetGeoTransform()
