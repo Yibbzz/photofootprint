@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  qgis:
+    name: QGIS ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["release-3_34", "latest"]
+    container: qgis/qgis:${{ matrix.image }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pytest
+        run: apt-get update && apt-get install -y python3-pytest
+      - name: Run tests
+        run: python3 -m pytest -v

@@ -54,7 +54,7 @@ Don't build from scratch: every core piece of this plugin already exists as free
 | 1 Import | Adapt Camera2Geo-style ExifRead + XMP parsing |
 | 2 Camera model | Follow OpenSfM conventions |
 | 3 Footprints | Viewshed wedge first (req. 4); edge ray casting only as a refinement for photos tilted down, informed by Footprint Generator |
-| 4 Occlusion | Reuse Visibility Analysis with azimuth/angle limits |
+| 4 Occlusion | GDAL `ViewshedGenerate` (ships with QGIS) on a window around the camera, plus a NumPy mask for heading ± HFOV/2 and pitch ± VFOV/2. Proven in the spike; Visibility Analysis is not needed as a dependency |
 | 5 Elevation fallback | Cut to a "where to get a DEM" help page and source list; no auto-download |
 | 6 Linked viewer | Custom Qt viewer (QGraphicsView) as the main path; MapillaryJS only as an optional extra where QWebEngine is available |
 | 7 Reverse lookup | New |
@@ -83,7 +83,7 @@ The MVP ships the most useful features first, and it holds up to bad compass dat
 | 1 — MVP | EXIF import to a photo point layer; camera model from EXIF with visible, editable defaults; footprint as a camera-limited viewshed wedge on a user DEM/DSM (occlusion included); dockable Qt image viewer with click-in-image → map point; reverse lookup (click map → photos that see it, ranked); manual heading slider with live footprint update |
 | 2 — Accuracy | Two-point heading (and optional pitch) correction; live footprint for the zoomed or panned part of the image; map hover → crosshair in image; edge ray-cast refinement for photos tilted down; batch Processing algorithms; confidence rating per footprint |
 | 3 — 360 | Equirectangular 360 viewer (QWebEngineView where available) with live yaw/pitch/zoom footprint; full 360 coverage footprint |
-| 4 — Optional extras | OpenSfM heading solve as an outside step; MapillaryJS viewer; elevation source help page |
+| 4 — Optional extras | "Share as web page" export: a self-contained folder (Leaflet map, footprints as GeoJSON, photos, click-to-find-photos in JavaScript) that opens in any browser with no server, for clients and site staff who don't use QGIS; OpenSfM heading solve as an outside step; MapillaryJS viewer; elevation source help page |
 
 **Out of scope (for now):** automatic DEM download, full photogrammetry or structure-from-motion inside the plugin, video, drone flight planning, 3D mesh output, cloud hosting, and any paid data source.
 
@@ -113,7 +113,7 @@ The MVP ships the most useful features first, and it holds up to bad compass dat
 **4. Viewshed occlusion**
 
 - With a DSM (surface model that includes buildings and trees), clip the footprint to the cells actually visible from the camera.
-- Use QGIS/GDAL viewshed (`gdal_viewshed` or the QGIS Visibility Analysis tools) limited to the footprint's bounding box and max range, then intersect.
+- Use GDAL's viewshed (`gdal.ViewshedGenerate`) on a window around the camera out to max range, then mask it to the camera's horizontal and vertical field of view in NumPy.
 - Output: a visible footprint (clipped) and the raw footprint, both kept.
 
 **5. Elevation handling**
@@ -227,7 +227,8 @@ Each milestone ends with a working plugin zip that installs from "Install from Z
 
 **How to work**
 
-- Start with a short spike (about 1–2 days) proving the biggest bet: Visibility Analysis (or `gdal_viewshed`) with azimuth and angle limits giving a usable camera footprint on a 1 m DSM within the speed targets. Also check which QGIS builds (Windows OSGeo4W, macOS, Linux, Qt5 and Qt6) ship QWebEngine. Report back before M1.
+- **Spike result (Nov 19, 2026):** GDAL viewshed plus the NumPy camera mask takes 39 ms per footprint on a 1 m DSM out to 300 m (target 150 ms), so a batch of 500 photos is about 20 s (target 10 min). A synthetic 10 m building correctly hides everything behind it. Script: `spike/viewshed_spike.py`. Still to check: which QGIS builds (Windows OSGeo4W, macOS, Linux, Qt5 and Qt6) ship QWebEngine, before M5.
+- **Web app decision:** no separate web app. Everything stays in QGIS; non-GIS people are reached through the Phase 4 "share as web page" export. Revisit only if users keep asking for hosted upload and browsing.
 
 * Build in milestone order. Don't start the next one until the current one's acceptance criteria pass.
 * Keep the maths in pure Python/NumPy modules with no QGIS imports, so it can be tested without QGIS.

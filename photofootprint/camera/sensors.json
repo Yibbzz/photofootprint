@@ -1,0 +1,12 @@
+{
+  "_comment": "Sensor width (long side) in mm, keyed 'make|model' or '|model' as written in EXIF. Only used when a photo has a real focal length but no 35 mm equivalent; most phones write the 35 mm equivalent, so they don't need an entry. Add entries as needed.",
+  "sensors": {
+    "Canon|Canon EOS 5D Mark IV": 36.0,
+    "Canon|Canon EOS R5": 36.0,
+    "Canon|Canon EOS R6": 35.9,
+    "NIKON CORPORATION|NIKON D850": 35.9,
+    "NIKON CORPORATION|NIKON Z 6": 35.9,
+    "SONY|ILCE-7M3": 35.6,
+    "SONY|ILCE-7RM4": 35.7
+  }
+}
