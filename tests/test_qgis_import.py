@@ -1,31 +1,12 @@
 """Runs the Import photos algorithm inside a headless QGIS. Skipped without QGIS."""
 
 import os
-import sys
 
 import pytest
 
 qgis_core = pytest.importorskip("qgis.core")
 
 from builders import make_jpeg, standard_tiff  # noqa: E402
-
-
-@pytest.fixture(scope="module")
-def qgis_app():
-    from qgis.core import QgsApplication
-    for p in ("/usr/share/qgis/python/plugins", "/usr/lib/qgis/python/plugins"):
-        if os.path.isdir(p) and p not in sys.path:
-            sys.path.append(p)
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    app = QgsApplication([], False)
-    app.initQgis()
-    from processing.core.Processing import Processing
-    Processing.initialize()
-    from photofootprint.provider import PhotoFootprintProvider
-    provider = PhotoFootprintProvider()
-    QgsApplication.processingRegistry().addProvider(provider)
-    yield app
-    QgsApplication.processingRegistry().removeProvider(provider)
 
 
 @pytest.fixture

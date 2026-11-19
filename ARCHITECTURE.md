@@ -9,6 +9,11 @@
 | `photofootprint/camera/sensors.json` | No | Sensor widths for cameras that write a real focal length but no 35 mm equivalent |
 | `photofootprint/importer/exif.py` | No | Pure-Python EXIF/XMP reader for JPEG and HEIC |
 | `photofootprint/importer/scan.py` | No | Folder scan → `PhotoRecord`s, with skipped photos and reasons |
+| `photofootprint/camera/attrs.py` | No | Camera from a photo layer's attributes (hfov, heading, pitch, roll, height_agl) |
+| `photofootprint/terrain/dem.py` | No (GDAL) | Windowed elevation reads, ground height under a camera |
+| `photofootprint/footprint/compute.py` | No (GDAL) | Viewshed + camera frame mask → visible and raw footprint polygons |
+| `photofootprint/footprint/algorithm.py` | Yes | Processing algorithm *Generate footprints* |
+| `photofootprint/ui/footprint_dock.py` | Yes | Footprint panel: live footprint with heading/pitch sliders |
 | `photofootprint/importer/algorithm.py` | Yes | Processing algorithm *Import photos*: writes the photo point layer |
 | `photofootprint/styles.py` | Yes | Default layer styles |
 | `photofootprint/compat.py` | Yes | Names that differ between QGIS 3.34 (Qt5) and QGIS 4 (Qt6) |
@@ -35,6 +40,24 @@ In order of preference:
 3. 35 mm equivalent focal length, measured on the diagonal (43.27 mm) → `35mm`
 4. The default (26 mm equivalent, a typical phone main camera) → `default`, with a note on the photo
 
-## Footprints (M2, planned)
+## Footprints
 
-From the spike: GDAL's `ViewshedGenerate` runs on a window around the camera out to max range. A NumPy mask then keeps cells within heading ± HFOV/2 and pitch ± VFOV/2. This takes about 39 ms per photo on a 1 m DSM out to 300 m.
+`footprint/compute.py` works in two steps, so the live slider only repeats the cheap part.
+
+1. **`prepare()`** runs once per photo, elevation model and range. It reads a DEM window out to max range and finds the ground height under the camera. That comes from the DTM if one is given, otherwise from the lowest DSM cell within 2 m, so a GPS point that lands on a roof still starts at street level. It then runs GDAL's viewshed with the camera `height_agl` above that ground. It also stores every in-range cell's surface point relative to the camera.
+2. **`footprint()`** runs for each heading/pitch/roll. It rotates the stored points into the camera frame and keeps those inside the image frame. That gives the **raw** footprint. ANDing it with the viewshed gives the **visible** footprint. Both are turned into polygons with `gdal.Polygonize`.
+
+Testing a cell's surface point against the real camera model keeps roll and the curved frame edges of tilted cameras exact. Wherever the top of the frame is above the horizon, the footprint runs out to max range, and `capped` records that.
+
+GDAL quirks handled: the viewshed output is cropped to its search extent, so it's pasted back onto the window grid. GDAL marks the observer's own cell and its neighbours unseen, so cells within two cells of the camera always count as seen. GDAL searches slightly past max range, so our own distance test sets the edge.
+
+Occlusion is off by default for DEMs coarser than 5 m.
+
+**Measured on a 1 m DEM (this machine):**
+
+| Range | New photo (viewshed) | Slider move |
+| --- | --- | --- |
+| 300 m | ~45 ms | ~20 ms |
+| 500 m | ~310 ms | ~55 ms |
+
+Not yet done: the first footprint for a newly selected photo runs on the UI thread, so a long range can stall the UI briefly (about 0.3 s at 500 m). Moving it to a `QgsTask` is planned with the live zoom footprint in M4.

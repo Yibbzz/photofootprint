@@ -1,6 +1,7 @@
 """Default layer styles."""
 
-from qgis.core import QgsMarkerSymbol, QgsProperty, QgsSingleSymbolRenderer
+from qgis.core import (QgsFillSymbol, QgsMarkerSymbol, QgsProperty,
+                       QgsSingleSymbolRenderer)
 
 from .compat import symbol_property
 
@@ -24,4 +25,19 @@ def style_photo_layer(layer):
         'heading [% coalesce(round("heading"), \'unknown\') %]&deg; '
         '([% "heading_source" %])<br>[% "datetime" %]<br>[% "notes" %]'
     )
+    layer.triggerRepaint()
+
+
+def style_footprint_layer(layer, raw=False):
+    """Translucent fill for visible footprints; dashed outline only for raw ones."""
+    if raw:
+        symbol = QgsFillSymbol.createSimple({
+            "style": "no", "outline_color": "120,120,120", "outline_style": "dash",
+            "outline_width": "0.3",
+        })
+    else:
+        symbol = QgsFillSymbol.createSimple({
+            "color": "230,85,13,60", "outline_color": "230,85,13,200", "outline_width": "0.3",
+        })
+    layer.setRenderer(QgsSingleSymbolRenderer(symbol))
     layer.triggerRepaint()
