@@ -15,13 +15,15 @@ class PhotoFootprintPlugin:
 
     def initProcessing(self):
         self.provider = PhotoFootprintProvider()
-        QgsApplication.processingRegistry().addProvider(self.provider)
+        if not QgsApplication.processingRegistry().addProvider(self.provider):
+            self.provider = None   # already registered (e.g. plugin reloaded); QGIS deleted ours
 
     def initGui(self):
         self.initProcessing()
         self._add_action("Import photos…", lambda: self._run("photofootprint:importphotos"))
         self._add_action("Generate footprints…", lambda: self._run("photofootprint:generatefootprints"))
-        self.panel_action = self._add_action("Footprint panel", self.toggle_panel, checkable=True)
+        self._add_action("Find photos at points…", lambda: self._run("photofootprint:findphotos"))
+        self.panel_action = self._add_action("Photo panel", self.toggle_panel, checkable=True)
 
     def _add_action(self, text, slot, checkable=False):
         action = QAction(text, self.iface.mainWindow())

@@ -20,6 +20,8 @@ FOLDER = getattr(getattr(Qgis, "ProcessingFileParameterBehavior", None), "Folder
                  getattr(QgsProcessingParameterFile, "Folder", 1))
 NUMBER_DOUBLE = getattr(getattr(Qgis, "ProcessingNumberParameterType", None), "Double",
                         getattr(QgsProcessingParameterNumber, "Double", 1))
+NUMBER_INTEGER = getattr(getattr(Qgis, "ProcessingNumberParameterType", None), "Integer",
+                         getattr(QgsProcessingParameterNumber, "Integer", 0))
 SOURCE_POINT = getattr(getattr(Qgis, "ProcessingSourceType", None), "VectorPoint",
                        getattr(QgsProcessing, "TypeVectorPoint", 0))
 SOURCE_POLYGON = getattr(getattr(Qgis, "ProcessingSourceType", None), "VectorPolygon",
@@ -47,9 +49,19 @@ LAYER_FILTER_POINT = getattr(_filters, "PointLayer", None) or QgsMapLayerProxyMo
 LAYER_FILTER_RASTER = getattr(_filters, "RasterLayer", None) or QgsMapLayerProxyModel.RasterLayer
 
 
-def _qt(enum, name):
-    scoped = getattr(Qt, enum, None)
-    return getattr(scoped, name) if scoped is not None and hasattr(scoped, name) else getattr(Qt, name)
+def enum(cls, enum_name, name):
+    """cls.EnumName.Name (Qt6 / newer QGIS) or cls.Name (Qt5)."""
+    scoped = getattr(cls, enum_name, None)
+    if scoped is not None and hasattr(scoped, name):
+        return getattr(scoped, name)
+    return getattr(cls, name)
+
+
+def enum_qt(enum_name, name):
+    return enum(Qt, enum_name, name)
+
+
+_qt = enum_qt
 
 
 HORIZONTAL = _qt("Orientation", "Horizontal")

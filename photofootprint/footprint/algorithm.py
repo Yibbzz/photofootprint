@@ -13,6 +13,7 @@ from qgis.core import (
 
 from .. import compat
 from ..camera.attrs import camera_from_attributes
+from ..geo import to_grid, true_north_offset
 from ..terrain.dem import Dem
 from .compute import COARSE_DEM_M, footprint, prepare
 
@@ -136,8 +137,10 @@ class GenerateFootprintsAlgorithm(QgsProcessingAlgorithm):
                 if feat.geometry().isEmpty():
                     raise ValueError("no geometry")
                 pt = to_dem.transform(feat.geometry().asPoint())
+                grid = to_grid(setup, true_north_offset(
+                    feat.geometry().asPoint(), source.sourceCrs(), dem_crs, context.transformContext()))
                 prep = prepare(dem, pt.x(), pt.y(), setup.height_agl, max_range, dtm, occlusion)
-                fp = footprint(prep, setup.camera, setup.heading, setup.pitch, setup.roll)
+                fp = footprint(prep, grid.camera, grid.heading, grid.pitch, grid.roll)
             except Exception as e:   # one bad photo must never stop the batch
                 skipped += 1
                 feedback.pushWarning(f"Skipped {label}: {e}")

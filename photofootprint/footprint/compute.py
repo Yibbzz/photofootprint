@@ -2,10 +2,15 @@
 
 Two steps, so the live heading slider stays fast:
 
-1. prepare(): read the DEM window around the camera, find the ground height
-   and run the viewshed. This depends only on position, height and range.
-2. footprint(): mask the prepared cells to the camera's frame for a given
-   heading/pitch/roll and turn the result into polygons.
+1. prepare(): read the DEM window around the camera and find the ground
+   height. Depends only on position, height and range.
+2. footprint(): mask the cells to the camera's frame for a given
+   heading/pitch/roll, make sure visibility is known for the directions the
+   frame covers, and turn the result into polygons.
+
+Visibility (terrain/visibility.py) is computed per 1/32 sector of the circle,
+only for sectors a frame has needed, and cached. A normal photo needs about a
+fifth of the circle; turning the heading slider fills in more as it goes.
 
 A cell counts as seen if the point at the centre of its surface is inside
 the image frame (raw footprint) and is visible from the camera (visible
@@ -22,36 +27,70 @@ from osgeo import gdal, ogr
 
 from ..camera.model import Pose
 from ..terrain.dem import Dem, Window
+from ..terrain.visibility import N_SECTORS, sector_of, sweep
 
 gdal.UseExceptions()
 ogr.UseExceptions()
 
-REFRACTION_COEFF = 0.85714   # standard atmospheric refraction, GDAL's default
 COARSE_DEM_M = 5.0           # occlusion is off by default for coarser DEMs
 GROUND_SEARCH_M = 2.0        # radius for the lowest-cell ground estimate on a DSM
 
 
-@dataclass
 class Prepared:
-    x: float
-    y: float
-    ground_z: float
-    ground_source: str        # "dtm" or "dsm_lowest_2m"
-    height_agl: float
-    max_range: float
-    window: Window
-    seen_from_camera: np.ndarray   # bool, viewshed result (all True if occlusion is off)
-    occlusion: bool
-    surface: np.ndarray       # (rows, cols, 3) cell centre points on the surface
-    in_range: np.ndarray      # bool, valid cells within max range
-    dist: np.ndarray
-    cells: np.ndarray = None  # flat indices of in-range cells
-    rel: np.ndarray = None    # (n, 3) in-range surface points minus the camera centre,
-                              # computed once so each heading change only rotates them
+    """Everything about one camera position that doesn't depend on its angles."""
+
+    def __init__(self, x, y, ground_z, ground_source, height_agl, max_range, window,
+                 occlusion, surface, in_range, dist):
+        self.x, self.y = x, y
+        self.ground_z = ground_z
+        self.ground_source = ground_source          # "dtm" or "dsm_lowest_2m"
+        self.height_agl = height_agl
+        self.max_range = max_range
+        self.window = window
+        self.occlusion = occlusion
+        self.surface = surface                      # (rows, cols, 3) cell centre surface points
+        self.in_range = in_range                    # bool, valid cells within max range
+        self.dist = dist
+        # In-range cells relative to the camera, so each heading change only rotates them
+        self.cells = np.flatnonzero(in_range)
+        self.rel = np.ascontiguousarray(
+            surface.reshape(-1, 3)[self.cells] - np.array([x, y, self.camera_z]))
+        az = np.arctan2(self.rel[:, 0], self.rel[:, 1])
+        self.cell_sector = sector_of(az)            # sector of each in-range cell
+        self._done = np.zeros(N_SECTORS, dtype=bool)
+        self._seen = np.zeros(in_range.shape, dtype=bool)
+        if not occlusion:
+            self._seen[:] = True
+            self._done[:] = True
+        else:
+            self._seen |= dist <= 2 * window.res    # the ground at the camera's feet
+            z = window.z.copy()
+            z[window.cell_of(x, y)] = ground_z      # observer on the ground, not on a roof cell
+            self._sweep_window = Window(z, window.gt, window.crs_wkt)
 
     @property
     def camera_z(self) -> float:
         return self.ground_z + self.height_agl
+
+    def ensure_sectors(self, sectors) -> None:
+        sectors = {int(k) % N_SECTORS for k in sectors}
+        todo = sorted(k for k in sectors if not self._done[k])
+        if todo:
+            sweep(self._sweep_window, self.x, self.y, self.camera_z, self.max_range, todo, self._seen)
+            self._done[todo] = True
+        self._seen &= ~np.isnan(self.window.z)
+
+    def seen_for(self, raw_flat_ok: np.ndarray) -> np.ndarray:
+        """Visibility array, computed for every sector the in-frame cells touch (and neighbours)."""
+        needed = np.unique(self.cell_sector[raw_flat_ok])
+        self.ensure_sectors(np.concatenate([needed - 1, needed, needed + 1]))
+        return self._seen
+
+    @property
+    def seen_from_camera(self) -> np.ndarray:
+        """Full-circle visibility (computes any missing sectors)."""
+        self.ensure_sectors(range(N_SECTORS))
+        return self._seen
 
 
 @dataclass
@@ -95,66 +134,30 @@ def prepare(dem: Dem, x: float, y: float, height_agl: float, max_range: float,
     dist = np.hypot(gx - x, gy - y)
     valid = ~np.isnan(win.z)
     in_range = valid & (dist <= max_range)
-
-    if occlusion:
-        z = win.z.copy()
-        z[win.cell_of(x, y)] = ground   # observer stands on the ground, not on a roof cell
-        src = win.to_mem(z)
-        vs = _viewshed(src.GetRasterBand(1), x, y, height_agl, max_range + 2 * win.res)
-        # GDAL searches slightly past max range; our own distance test sets the edge.
-        seen = _paste(vs.GetRasterBand(1).ReadAsArray() == 1, vs.GetGeoTransform(), win)
-        # GDAL marks the observer's own cell and its neighbours unseen; the ground
-        # at the camera's feet is always visible.
-        seen |= dist <= 2 * win.res
-    else:
-        seen = np.ones(win.z.shape, dtype=bool)
-
     surface = np.stack([gx, gy, np.where(valid, win.z, ground)], axis=-1)
-    cells = np.flatnonzero(in_range)
-    rel = surface.reshape(-1, 3)[cells] - np.array([x, y, ground + height_agl])
-    return Prepared(x, y, ground, source, height_agl, max_range, win, seen & valid,
-                    occlusion, surface, in_range, dist, cells, np.ascontiguousarray(rel))
+    return Prepared(x, y, ground, source, height_agl, max_range, win, occlusion,
+                    surface, in_range, dist)
 
 
-def _viewshed(band, x, y, height, max_distance):
-    """gdal.ViewshedGenerate in memory. Old GDAL (3.4) needs creationOptions=None;
-    new GDAL (3.10) needs a list. Try one, then the other."""
-    args = (x, y, height, 0.0, 1, 0, 0, 0, REFRACTION_COEFF, gdal.GVM_Edge, max_distance)
-    try:
-        return gdal.ViewshedGenerate(band, "MEM", "", [], *args)
-    except TypeError:
-        return gdal.ViewshedGenerate(band, "MEM", "", None, *args)
-
-
-def _paste(arr, gt, win: Window):
-    """Place a raster that GDAL cropped to the search range back onto the window grid."""
-    out = np.zeros(win.z.shape, dtype=bool)
-    c0 = int(round((gt[0] - win.gt[0]) / win.gt[1]))
-    r0 = int(round((gt[3] - win.gt[3]) / win.gt[5]))
-    rows, cols = arr.shape
-    # Clip to the window in case GDAL's extent is larger
-    sr0, sc0 = max(-r0, 0), max(-c0, 0)
-    dr0, dc0 = max(r0, 0), max(c0, 0)
-    h = min(rows - sr0, out.shape[0] - dr0)
-    w = min(cols - sc0, out.shape[1] - dc0)
-    if h > 0 and w > 0:
-        out[dr0:dr0 + h, dc0:dc0 + w] = arr[sr0:sr0 + h, sc0:sc0 + w]
-    return out
+def _frame_ok(prep: Prepared, camera, heading, pitch, roll):
+    pose = Pose(prep.x, prep.y, prep.camera_z, heading, pitch, roll)
+    _, _, ok = camera.project_cam(prep.rel @ pose.matrix)   # world -> camera frame
+    return ok
 
 
 def frame_mask(prep: Prepared, camera, heading: float, pitch: float, roll: float = 0.0):
     """Bool array: cells whose surface point is inside the image frame and in range."""
-    pose = Pose(prep.x, prep.y, prep.camera_z, heading, pitch, roll)
     mask = np.zeros(prep.in_range.shape, dtype=bool)
-    _, _, ok = camera.project_cam(prep.rel @ pose.matrix)   # world -> camera frame
-    mask.flat[prep.cells] = ok
+    mask.flat[prep.cells] = _frame_ok(prep, camera, heading, pitch, roll)
     return mask
 
 
 def footprint(prep: Prepared, camera, heading: float, pitch: float, roll: float = 0.0,
               polygons: bool = True) -> Footprint:
-    raw = frame_mask(prep, camera, heading, pitch, roll)
-    vis = raw & prep.seen_from_camera
+    ok = _frame_ok(prep, camera, heading, pitch, roll)
+    raw = np.zeros(prep.in_range.shape, dtype=bool)
+    raw.flat[prep.cells] = ok
+    vis = raw & prep.seen_for(ok)
     cell_area = prep.window.res ** 2
     raw_area = float(raw.sum()) * cell_area
     vis_area = float(vis.sum()) * cell_area

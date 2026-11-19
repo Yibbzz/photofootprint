@@ -2,6 +2,7 @@ from qgis.core import QgsProcessingProvider
 
 from .footprint.algorithm import GenerateFootprintsAlgorithm
 from .importer.algorithm import ImportPhotosAlgorithm
+from .lookup.algorithm import FindPhotosAlgorithm
 
 
 class PhotoFootprintProvider(QgsProcessingProvider):
@@ -17,3 +18,4 @@ class PhotoFootprintProvider(QgsProcessingProvider):
     def loadAlgorithms(self):
         self.addAlgorithm(ImportPhotosAlgorithm())
         self.addAlgorithm(GenerateFootprintsAlgorithm())
+        self.addAlgorithm(FindPhotosAlgorithm())

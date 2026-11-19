@@ -135,3 +135,21 @@ def make_heic(path, tiff):
     with open(path, "wb") as f:
         f.write(out)
     return path
+
+
+def make_real_jpeg(path, width, height, tiff):
+    """A decodable JPEG (drawn with Qt) carrying the given EXIF block. Needs Qt."""
+    from qgis.PyQt.QtCore import QBuffer, QByteArray
+    from qgis.PyQt.QtGui import QColor, QImage
+    img = QImage(width, height, QImage.Format.Format_RGB32 if hasattr(QImage, "Format") else QImage.Format_RGB32)
+    img.fill(QColor(90, 140, 200))
+    data = QByteArray()
+    buf = QBuffer(data)
+    buf.open(QBuffer.OpenModeFlag.WriteOnly if hasattr(QBuffer, "OpenModeFlag") else QBuffer.WriteOnly)
+    img.save(buf, "JPEG")
+    raw = bytes(data)
+    seg = b"Exif\x00\x00" + tiff
+    app1 = b"\xff\xe1" + struct.pack(">H", len(seg) + 2) + seg
+    with open(path, "wb") as f:
+        f.write(raw[:2] + app1 + raw[2:])
+    return path
