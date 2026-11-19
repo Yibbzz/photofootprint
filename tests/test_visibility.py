@@ -1,7 +1,7 @@
-"""The radial sweep must match exact line of sight, in both directions.
+"""The radial sweep must match strict line of sight, in both directions.
 
-This is the check that showed gdal.ViewshedGenerate hiding 5-11 % of
-genuinely visible ground.
+The same check showed gdal.ViewshedGenerate wrongly hiding 1-5 % of visible
+ground. tests/test_grass_crosscheck.py compares against GRASS r.viewshed.
 """
 
 import numpy as np
