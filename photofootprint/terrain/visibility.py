@@ -1,8 +1,9 @@
 """Which cells can a camera see? Radial sweep, NumPy only.
 
-Replaces gdal.ViewshedGenerate, which was measured hiding 5-11 % of
-genuinely visible ground (all four GDAL modes, always on the hidden side)
-when checked against exact line of sight. See tests/test_visibility.py.
+Replaces gdal.ViewshedGenerate, which uses an approximation instead of
+true line of sight and wrongly hid 1-5 % of visible ground in tests. Agrees
+with GRASS r.viewshed on over 99 % of cells (tests/test_grass_crosscheck.py)
+but runs per sector, in-process, without GRASS.
 
 Method: cast rays outward from the camera at about two rays per cell at
 max range, step along each in half-cell steps sampling the bilinear

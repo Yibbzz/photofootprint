@@ -54,7 +54,11 @@ In order of preference:
 
 The circle is split into 32 sectors, computed only when a frame needs them and then cached. A normal photo needs about a fifth of the circle, and turning the heading slider fills in more as it goes.
 
-**Why not `gdal.ViewshedGenerate`?** It was used in M2. Checked against exact line of sight, all four GDAL modes hid 5–11% of ground that is actually visible, always erring towards hidden. The sweep wrongly hides none and wrongly shows about 0.5%: a cell counts if any part of it is visible, while the check tests its centre. `tests/test_visibility.py` measures this on buildings and on hills.
+**Why not `gdal.ViewshedGenerate`?** It was used in M2. GDAL uses the Wang et al. reference-plane approximation instead of true line of sight, and errs towards hidden. Against strict line of sight on test surfaces with buildings and hills, it wrongly hid 1–5% of points.
+
+**Why not GRASS `r.viewshed`?** It is accurate: it uses an exact sweep-line algorithm and is within 0.1–0.4% of strict line of sight on the same tests. But it takes about 1.4 s per photo including GRASS start-up (about 12 min for 500 photos), it always does the full circle, and GRASS isn't in every QGIS install. Instead it serves as the independent reference: `tests/test_grass_crosscheck.py` requires the plugin's sweep to agree with `r.viewshed` on over 99% of cells, and runs wherever GRASS is installed. Measured: 0.04–0.08% seen only by GRASS, 0.55–0.69% only by the plugin. The second figure is the any-part-of-the-cell rule.
+
+Line of sight is strict, with 0 m tolerance. An earlier 0.25 m allowance let sightlines graze through building edges and made 5–8% too much ground visible.
 
 ## Photo lookup
 

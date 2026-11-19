@@ -10,7 +10,8 @@ import numpy as np
 
 from .dem import Window
 
-LOS_TOLERANCE_M = 0.25   # ignore tiny surface bumps from interpolation on slopes
+LOS_TOLERANCE_M = 0.0    # strict. A 0.25 m allowance was tried and let sightlines graze
+                         # through building edges (5-8 % too much seen vs GRASS r.viewshed)
 
 
 def sample(win: Window, x, y):

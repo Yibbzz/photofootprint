@@ -54,7 +54,7 @@ Don't build from scratch: every core piece of this plugin already exists as free
 | 1 Import | Adapt Camera2Geo-style ExifRead + XMP parsing |
 | 2 Camera model | Follow OpenSfM conventions |
 | 3 Footprints | Viewshed wedge first (req. 4); edge ray casting only as a refinement for photos tilted down, informed by Footprint Generator |
-| 4 Occlusion | Own radial-sweep visibility in NumPy, computed per sector on demand, plus the camera-model frame mask. GDAL `ViewshedGenerate` was used first but hid 5–11% of visible ground (see Spike result). Visibility Analysis is not needed |
+| 4 Occlusion | Own radial-sweep visibility in NumPy, computed per sector on demand, plus the camera-model frame mask. GDAL `ViewshedGenerate` was used first but wrongly hid 1–5% of visible ground. Cross-checked against GRASS `r.viewshed` in tests. Visibility Analysis is not needed |
 | 5 Elevation fallback | Cut to a "where to get a DEM" help page and source list; no auto-download |
 | 6 Linked viewer | Custom Qt viewer (QGraphicsView) as the main path; MapillaryJS only as an optional extra where QWebEngine is available |
 | 7 Reverse lookup | New |
@@ -227,7 +227,7 @@ Each milestone ends with a working plugin zip that installs from "Install from Z
 
 **How to work**
 
-- **Spike result (Nov 19, 2026):** GDAL viewshed plus the NumPy camera mask takes 39 ms per footprint on a 1 m DSM out to 300 m (target 150 ms), so a batch of 500 photos is about 20 s (target 10 min). A synthetic 10 m building correctly hides everything behind it. Script: `spike/viewshed_spike.py`. **Update (M3):** checked against exact line of sight, GDAL's viewshed wrongly hid 5–11% of visible ground in every mode, so it was replaced by an exact radial sweep. That is 0.6 s per photo at 500 m, about 5 min for 500 photos, still within target. Still to check: which QGIS builds (Windows OSGeo4W, macOS, Linux, Qt5 and Qt6) ship QWebEngine, before M5.
+- **Spike result (Nov 19, 2026):** GDAL viewshed plus the NumPy camera mask takes 39 ms per footprint on a 1 m DSM out to 300 m (target 150 ms), so a batch of 500 photos is about 20 s (target 10 min). A synthetic 10 m building correctly hides everything behind it. Script: `spike/viewshed_spike.py`. **Update (M3):** checked against strict line of sight, GDAL's viewshed (Wang et al. reference-plane approximation, not true line of sight) wrongly hid 1–5% of visible ground. GRASS `r.viewshed` was accurate (0.1–0.4%) but too slow per photo (about 1.4 s with GRASS start-up) and not in every QGIS install. The plugin now uses its own exact radial sweep: 0.6 s per photo at 500 m, about 5 min for 500 photos. It is cross-checked against `r.viewshed` in the tests, agreeing on over 99% of cells. Still to check: which QGIS builds (Windows OSGeo4W, macOS, Linux, Qt5 and Qt6) ship QWebEngine, before M5.
 - **Web app decision:** no separate web app. Everything stays in QGIS; non-GIS people are reached through the Phase 4 "share as web page" export. Revisit only if users keep asking for hosted upload and browsing.
 
 * Build in milestone order. Don't start the next one until the current one's acceptance criteria pass.
